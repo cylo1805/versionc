@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Historia Clínica Estética</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/toastify-js">function mostrarConsentimiento() {
+  document.getElementById("seccionPaciente").style.display = "none";
+  document.getElementById("seccionConsentimiento").style.display = "block";
+}
+
+function guardarFormulario() {
+  const form = document.getElementById("formulario");
+  const data = new FormData(form);
+  data.append("firma", document.getElementById("firma").toDataURL());
+
+  const obj = {};
+  data.forEach((value, key) => {
+    obj[key] = value;
+  });
+
+  fetch("https://script.google.com/macros/s/AKfycbxlv1KxKMUK7BDoLh_PwNj8s9vrRW1dg8Y1Ohy-uhYYSQ9f952J4NvGvuZCHrkAGtv_/exec", {
+    method: "POST",
+    body: JSON.stringify(obj),
+    headers: {
+      "Content-Type": "application/json"
+    }
+  }).then(res => res.text()).then(respuesta => {
+    Toastify({
+      text: "Formulario guardado correctamente.",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      backgroundColor: "#4caf50"
+    }).showToast();
+  }).catch(error => {
+    console.error("Error al guardar el formulario:", error);
+    Toastify({
+      text: "Error al guardar el formulario.",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      backgroundColor: "#f44336"
+    }).showToast();
+  });
+}
+</script>
+<script>
+
+function generarPDF() {
+  const jsPDF = window.jspdf?.jsPDF;
+  const doc = new jsPDF();
+
+  const nombre = document.querySelector('[name="nombres"]').value;
+  const apellidos = document.querySelector('[name="apellidos"]').value;
+  const fecha = document.querySelector('[name="fechaConsulta"]').value;
+  const servicio = document.getElementById("servicio").value;
+  const consentimiento = document.getElementById("consentimientoTexto").value;
+  const firmaCanvas = document.getElementById("firma");
+  const firmaBase64 = firmaCanvas.toDataURL("image/png");
+
+  const textoConsentimiento = `${nombre} ${apellidos} - ${fecha}
+
+Servicio: ${servicio}
+
+${consentimiento}`;
+  const splitTexto = doc.splitTextToSize(textoConsentimiento, 180);
+
+  doc.text(splitTexto, 10, 20);
+  doc.addImage(firmaBase64, 'PNG', 10, doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 260, 60, 20);
+
+  doc.save(`consentimiento_${nombre}_${apellidos}.pdf`);
+}
+</script>
+<script>
+function agregarNuevoConsentimiento() {
+  const servicio = document.getElementById("nuevoServicio").value.trim().toLowerCase();
+  const texto = document.getElementById("nuevoTexto").value.trim();
+  const selector = document.getElementById("servicio");
+
+  if (!servicio || !texto) {
+    Toastify({
+      text: "Por favor ingresa el nombre del servicio y el consentimiento.",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      backgroundColor: "#f44336"
+    }).showToast();
+    return;
+  }
+
+  if (textos[servicio]) {
+    Toastify({
+      text: "Este servicio ya existe. Puedes modificarlo desde el código.",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      backgroundColor: "#ff9800"
+    }).showToast();
+    return;
+  }
+
+  textos[servicio] = texto;
+
+  fetch('https://script.google.com/macros/s/AKfycbxlv1KxKMUK7BDoLh_PwNj8s9vrRW1dg8Y1Ohy-uhYYSQ9f952J4NvGvuZCHrkAGtv_/exec', {
+    method: 'POST',
+    body: JSON.stringify({
+      tipo: 'consentimiento',
+      servicio: servicio,
+      texto: texto
+    }),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  }).then(res => res.text()).then(respuesta => {
+    console.log('Guardado en hoja de Consentimientos:', respuesta);
+  }).catch(error => {
+    console.error('Error al guardar consentimiento en hoja:', error);
+  });
+
+  const opcion = document.createElement("option");
+  opcion.value = servicio;
+  opcion.textContent = servicio.charAt(0).toUpperCase() + servicio.slice(1);
+  selector.appendChild(opcion);
+
+  Toastify({
+    text: "Nuevo consentimiento guardado en memoria.",
+    duration: 3000,
+    gravity: "top",
+    position: "right",
+    backgroundColor: "#4caf50"
+  }).showToast();
+
+  document.getElementById("nuevoServicio").value = "";
+  document.getElementById("nuevoTexto").value = "";
+}
+
+    async function cargarConsentimientosDesdeSheets() {
+      try {
+        const respuesta = await fetch("https://script.google.com/macros/s/AKfycbxlv1KxKMUK7BDoLh_PwNj8s9vrRW1dg8Y1Ohy-uhYYSQ9f952J4NvGvuZCHrkAGtv_/exec?tipo=leerConsentimientos");
+        const datos = await respuesta.json();
+        if (!datos || !Array.isArray(datos)) return;
+
+        datos.forEach(fila => {
+          const servicio = fila[0].toLowerCase();
+          const texto = fila[1];
+          textos[servicio] = texto;
+
+          const selector = document.getElementById("servicio");
+          const existe = [...selector.options].some(opt => opt.value === servicio);
+          if (!existe) {
+            const opcion = document.createElement("option");
+            opcion.value = servicio;
+            opcion.textContent = servicio.charAt(0).toUpperCase() + servicio.slice(1);
+            selector.appendChild(opcion);
+          }
+        });
+      } catch (error) {
+        console.error("Error al cargar consentimientos desde Sheets:", error);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+  cargarConsentimientosDesdeSheets().then(() => {
+    actualizarSelectorEditar();
+  });
+});
+function editarConsentimiento() {
+  const servicio = document.getElementById("editarServicio").value;
+  const texto = document.getElementById("editarTexto").value.trim();
+  if (!servicio || !texto) {
+    Toastify({ text: "Selecciona un servicio y escribe el nuevo texto.", duration: 3000, gravity: "top", position: "right", backgroundColor: "#f44336" }).showToast();
+    return;
+  }
+  textos[servicio] = texto;
+  document.getElementById("consentimientoTexto").value = texto;
+  fetch("https://script.google.com/macros/s/AKfycbxlv1KxKMUK7BDoLh_PwNj8s9vrRW1dg8Y1Ohy-uhYYSQ9f952J4NvGvuZCHrkAGtv_/exec", {
+    method: 'POST',
+    body: JSON.stringify({ tipo: "actualizarConsentimiento", servicio, texto }),
+    headers: { 'Content-Type': 'application/json' }
+  }).then(r => r.text()).then(msg => {
+    Toastify({ text: "Consentimiento actualizado", duration: 3000, gravity: "top", position: "right", backgroundColor: "#4caf50" }).showToast();
+  });
+}
+
+function eliminarConsentimiento() {
+  const servicio = document.getElementById("editarServicio").value;
+  if (!servicio) {
+    Toastify({ text: "Selecciona un servicio para eliminar.", duration: 3000, gravity: "top", position: "right", backgroundColor: "#f44336" }).showToast();
+    return;
+  }
+  delete textos[servicio];
+  fetch("https://script.google.com/macros/s/AKfycbxlv1KxKMUK7BDoLh_PwNj8s9vrRW1dg8Y1Ohy-uhYYSQ9f952J4NvGvuZCHrkAGtv_/exec", {
+    method: 'POST',
+    body: JSON.stringify({ tipo: "eliminarConsentimiento", servicio }),
+    headers: { 'Content-Type': 'application/json' }
+  }).then(r => r.text()).then(msg => {
+    Toastify({ text: "Consentimiento eliminado", duration: 3000, gravity: "top", position: "right", backgroundColor: "#4caf50" }).showToast();
+    document.getElementById("editarTexto").value = "";
+    document.getElementById("editarServicio").remove(document.querySelector(`#editarServicio option[value='${servicio}']`));
+  });
+}
+
+function actualizarSelectorEditar() {
+  const editar = document.getElementById("editarServicio");
+  editar.innerHTML = '<option value="">Selecciona un servicio</option>';
+  Object.keys(textos).forEach(servicio => {
+    const opcion = document.createElement("option");
+    opcion.value = servicio;
+    opcion.textContent = servicio.charAt(0).toUpperCase() + servicio.slice(1);
+    editar.appendChild(opcion);
+  });
+}
+
+actualizarSelectorEditar();
+
+</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fdf6ff;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #cba7e0;
+      padding: 1rem;
+      text-align: center;
+    }
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 1rem;
+    }
+    h2 {
+      color: #7b4f9d;
+    }
+    label {
+      display: block;
+      margin-top: 1rem;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.3rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    canvas {
+      border: 1px solid #999;
+      margin-top: 0.5rem;
+    }
+    button {
+      margin-top: 1rem;
+      background-color: #a66bbd;
+      color: white;
+      padding: 0.6rem 1rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Historia Clínica Estética</h1>
+  </header>
+  <div class="container">
+    <form id="formulario">
+<div id="seccionPaciente">
+  <button type="button" onclick="verHistorial()">Ver historial por nombre y apellidos</button>
+      <label>Nombre de la clínica:</label>
+      <input type="text" id="nombreClinica" value="Clínica Vive Bella - Medicina Estética y Bienestar" />
+
+      <label>Pie de página del consentimiento:</label>
+      <input type="text" id="pieClinica" value="Contacto: vivebellaxalapa2@gmail.com | Tel: 228-000-0000" />
+
+      </div>
+<div id="seccionConsentimiento" style="display:none;">
+<button type="button" onclick="mostrarConsentimiento()">Continuar</button>
+<label>Servicio Realizado:</label>
+      <select name="servicioRealizado" id="servicio" onchange="cargarConsentimiento()">
+        <option value="">Selecciona un servicio</option>
+        <option value="hidrolipoclasia">Hidrolipoclasia</option>
+        <option value="sculptra">Sculptra</option>
+        <option value="peptonas">Peptonas en glúteo</option>
+      </select>
+
+      <label>Consentimiento Informado:</label>
+      <textarea name="consentimientoTexto" id="consentimientoTexto" rows="6" required></textarea>
+
+      <label>Nombre del paciente:</label>
+      <input type="text" name="nombres" required />
+
+      <label>Apellidos:</label>
+      <input type="text" name="apellidos" required />
+
+      <label>Fecha de consulta:</label>
+      <input type="date" name="fechaConsulta" required />
+
+      <label>Edad:</label>
+      <input type="text" name="edad" required />
+
+      <label>Sexo:</label>
+      <select name="sexo" required>
+        <option value="">Seleccione</option>
+        <option value="Femenino">Femenino</option>
+        <option value="Masculino">Masculino</option>
+      </select>
+
+      <label>Número de teléfono:</label>
+      <input type="text" name="telefono" required />
+
+      <h3>Datos Clínicos</h3>
+
+      <label>Enfermedades sufridas:</label>
+      <textarea name="enfermedadesSufridas"></textarea>
+
+      <label>Enfermedades cardíacas / renales / digestivas / circulatorias:</label>
+      <textarea name="enfermedadesOrganos"></textarea>
+
+      <label>Problemas de azúcar, hipertensión o hipotensión:</label>
+      <textarea name="problemasPresion"></textarea>
+
+      <label>¿Presenta alergias? ¿Convulsiones?</label>
+      <textarea name="alergiasConvulsiones"></textarea>
+
+      <label>¿Usa marcapasos o toma antidepresivos / cortisonas?</label>
+      <textarea name="medicacionEspecial"></textarea>
+
+      <label>Implante hormonal o anticonceptivos:</label>
+      <textarea name="hormonasAnticonceptivos"></textarea>
+
+      <label>Estudios hormonales o tiroides recientes:</label>
+      <textarea name="estudiosHormonas"></textarea>
+
+      <label>¿Le cuesta bajar de peso con dieta o ejercicio?</label>
+      <textarea name="dificultadBajarPeso"></textarea>
+
+      <label>¿Qué alimentos consume más?</label>
+      <textarea name="alimentosFrecuentes"></textarea>
+
+      <label>Problemas de piel:</label>
+      <textarea name="problemasPiel"></textarea>
+
+      <label>¿Está embarazada? ¿Tiene implantes en glúteo?</label>
+      <textarea name="embarazoImplantes"></textarea>
+
+      <label>Medicamentos actuales (inyectados o tomados):</label>
+      <textarea name="medicacionActual"></textarea>
+
+      <label>Herpes, micosis, consumo de alcohol o tabaco:</label>
+      <textarea name="habitos"></textarea>
+
+      <label>Horas de sueño y regularidad del periodo menstrual:</label>
+      <textarea name="suenoMenstruacion"></textarea>
+
+      <label>Tratamientos dermatológicos o procedimientos estéticos previos:</label>
+      <textarea name="tratamientosPrevios"></textarea>
+
+      <label>¿Presentó alguna complicación? ¿Cuál?</label>
+      <textarea name="complicaciones"></textarea>
+
+      <label>Modo de vida (activa / sedentaria), cuidado de la piel y agua al día:</label>
+      <textarea name="modoVidaHidratacion"></textarea>
+
+      <label>¿Toma vitaminas para la piel?</label>
+      <textarea name="vitaminasPiel"></textarea>
+
+      <label>Firma del paciente:</label>
+      <canvas id="firma" width="300" height="100"></canvas>
+
+      <input type="hidden" name="firmaImagen" id="firmaImagen" />
+      <button type="button" onclick="generarPDF()">Generar PDF</button>
+<button type="button" onclick="guardarFormulario()">Guardar</button>
+<button type="button" onclick="generarPDF()">Generar PDF</button>
+      <button type="button" onclick="guardarPDFenDrive()">Guardar en Drive</button>
+      <button type="button" onclick="verHistorial()">Ver historial por paciente</button>
+    <label>Agregar nuevo consentimiento:</label>
+      <input type="text" id="nuevoServicio" placeholder="Nombre del nuevo servicio">
+      <textarea id="nuevoTexto" rows="5" placeholder="Texto del consentimiento"></textarea>
+      <button type="button" onclick="agregarNuevoConsentimiento()">Guardar consentimiento</button>
+    <label>Editar consentimiento existente:</label>
+      <select id="editarServicio"></select>
+      <textarea id="editarTexto" rows="5" placeholder="Modificar texto del consentimiento"></textarea>
+      <button type="button" onclick="editarConsentimiento()">Guardar cambios</button>
+      <button type="button" onclick="eliminarConsentimiento()">Eliminar consentimiento</button>
+    </div>
+</form>
+
+    <div id="panelHistorial" style="margin-top: 2rem; display: none;">
+      <h2>Historial del Paciente</h2>
+      <button onclick="imprimirHistorial()">Imprimir historial</button>
+      <button onclick="cerrarHistorial()">Cerrar historial</button>
+      <iframe id="iframeHistorial" width="100%" height="500px" style="border:1px solid #ccc;"></iframe>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('firma');
+    const ctx = canvas.getContext('2d');
+    let dibujando = false;
+
+    canvas.addEventListener('mousedown', () => dibujando = true);
+    canvas.addEventListener('mouseup', () => { dibujando = false; ctx.beginPath(); });
+    canvas.addEventListener('mouseout', () => dibujando = false);
+    canvas.addEventListener('mousemove', dibujar);
+
+    function dibujar(e) {
+      if (!dibujando) return;
+      const rect = canvas.getBoundingClientRect();
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#000';
+      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    function limpiarFirma() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function archivoABase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+      });
+    }
+
+    function cargarConsentimiento() {
+      const servicio = document.getElementById("servicio").value;
+      const consentimiento = document.getElementById("consentimientoTexto");
+      const textos = {
+  hidrolipoclasia: `CONSENTIMIENTO INFORMADO PARA HIDROLIPOCLASIA CON LIPOLITICOS O ENZIMAS
+
+DECLARO
+Se me ha explicado que es conveniente proceder, en mi situación, a recibir tratamiento de hidrolipoclasia. El objeto de la técnica es ayudar a disminuir la celulitis, reducir el panículo adiposo, mejorar la circulación y el drenaje de la zona a tratar.
+
+El tratamiento consiste en inyectar solución salina fisiológica o agua destilada con componentes de sustancias homeopáticas del laboratorio: vasodilatadores, lipolíticos, reafirmantes, etc.
+
+Se me ha entregado en el momento de la información verbal, información escrita de cada tratamiento donde se especifica laboratorios, principios activos y proceder del tratamiento. He sido correctamente informado/a de las características de este tratamiento, de la forma y pormenores de su realización, de su mecanismo de acción, de sus efectos inmediatos, de la evolución y precauciones que deberé adoptar y de la variabilidad en el tiempo necesario para dar por finalizado el tratamiento.
+
+Entiendo que, aunque el tratamiento seleccionado sea el más adecuado para mí y a pesar de su correcta realización, a veces pueden darse efectos no deseados, como hinchazón, enrojecimiento, escozor, algún tipo de reacción alérgica local o algún hematoma que desaparecerán espontáneamente en varios días. Excepcionalmente puede aparecer infección en la zona, que se trataría adecuadamente.
+
+Sé y acepto que circunstancias personales (enfermedades, hábitos y tratamientos que no he ocultado y que consta en mi historial clínico) pueden incrementar la incidencia de las complicaciones indicadas e incluso otras.
+
+Me han informado de que, aunque este es el tratamiento más indicado para mí, pueden existir otras alternativas que también me han sido comentadas. También conozco las posibles consecuencias de no realizar el tratamiento que se me propone.
+
+Me comprometo a seguir fielmente las indicaciones, para que el tratamiento tenga los mejores resultados.
+
+Reconozco y acepto que no se me pueden dar garantías o seguridad absoluta respecto de resultados de tratamiento, y manifiesto que mis preguntas en este sentido han sido contestadas satisfactoriamente. Asumo el riesgo de que, como consecuencia de un tratamiento correctamente realizado, puedo no sentirme satisfecho/a con la apreciación personal y subjetiva del resultado estético obtenido, algo que el especialista no puede prever.
+
+He entendido claramente toda la información concerniente al tratamiento que se me ha facilitado. El médico que me ha atendido me ha permitido realizar todas las observaciones y me ha aclarado todas las dudas que he planteado.
+
+Reconozco y acepto que el tratamiento propuesto no agota los recursos y podía ser que requiriese una actuación terapéutica posterior.
+
+Sé que en cualquier momento previo al tratamiento puedo considerar mi consentimiento y anular este documento.
+
+Accedo y autorizo a seguir un control fotográfico pre y post tratamientos u otros materiales audiovisuales y gráficos y con la sola finalidad del control evolutivo de mi tratamiento y valoración científica.
+
+Considerando que he sido suficientemente informado/a y aclaradas mis posibles dudas sobre el procedimiento y posibles resultados.
+
+ES IMPORTANTE QUE LEA CUIDADOSAMENTE LA INFORMACIÓN Y HAYAN SIDO RESPONDIDAS TODAS SUS PREGUNTAS ANTES DE QUE FIRME EL CONSENTIMIENTO.
+
+Nombre y Firma de la paciente y fecha
+Nombre y firma de responsable`,
+  sculptra: `CONSENTIMIENTO INFORMADO PARA LA APLICACIÓN DE SCULPTRA®
+
+Datos del Paciente
+• Nombre: ________________________________________
+• Edad: _______ Género: _______
+• Teléfono: _______________________________________
+• Dirección: ______________________________________
+
+Descripción del Procedimiento
+Sculptra® es un bioestimulador de colágeno compuesto por ácido poli-L-láctico (PLLA). Su función es estimular la producción natural de colágeno, mejorando la firmeza, elasticidad y volumen de la piel. Se aplica mediante inyecciones en áreas específicas del rostro o cuerpo.
+
+El tratamiento se realiza en varias sesiones (generalmente 2 a 4) con intervalos de aproximadamente 4 a 6 semanas entre cada una. Los resultados aparecen de manera gradual en un período de 2 a 6 meses y pueden durar hasta 2 años o más, dependiendo del metabolismo del paciente y los cuidados posteriores.
+
+Posibles Beneficios
+• Mejora la calidad y textura de la piel.
+• Aumenta la producción de colágeno.
+• Recupera el volumen facial o corporal perdido por el envejecimiento.
+• Resultados naturales y progresivos.
+
+Posibles Efectos Secundarios y Riesgos
+Como cualquier procedimiento médico, la aplicación de Sculptra® puede tener efectos adversos, entre los que se incluyen:
+• Reacciones locales: enrojecimiento, hinchazón, dolor, hematomas o sensibilidad en el área tratada.
+• Pequeñas protuberancias o nódulos subcutáneos, que pueden ser temporales o persistentes.
+• Infección, por no llevar los cuidados posteriores.
+• Reacciones alérgicas en casos extremadamente raros.
+
+Contraindicaciones
+Este tratamiento NO está recomendado en los siguientes casos:
+• Alergia al ácido poli-L-láctico o a cualquier componente del producto.
+• Enfermedades autoinmunes activas o en tratamiento inmunosupresor.
+• Infecciones activas en la zona de aplicación.
+• Embarazo o lactancia.
+• Historia de cicatrización anormal (queloides o hipertróficas).
+• Uso de anticoagulantes sin autorización médica.
+
+Cuidados Posteriores
+Para optimizar los resultados y reducir efectos secundarios, se recomienda:
+• Masajear el área tratada (5 minutos, 5 veces al día, durante 5 días).
+• Evitar exposición solar directa, saunas o actividades físicas intensas por 24-48 horas.
+• No manipular ni presionar la zona tratada.
+• Seguir todas las indicaciones médicas.
+
+Declaración del Paciente
+Declaro que:
+1. He sido informado(a) de manera clara y comprensible sobre la aplicación de Sculptra®, sus beneficios, riesgos, cuidados posteriores y posibles efectos secundarios.
+2. He tenido la oportunidad de realizar preguntas, las cuales han sido respondidas satisfactoriamente.
+3. Entiendo que los resultados varían entre personas y que el efecto es progresivo.
+4. Acepto voluntariamente realizarme este procedimiento bajo mi responsabilidad.
+
+Firma del Paciente
+Nombre: ________________________________________
+Firma: _________________________________________
+Fecha: _________________________________________
+
+Firma del profesional Responsable`,
+  peptonas: `CONSENTIMIENTO INFORMADO PARA PEPTONAS
+Vive Bella
+
+DECLARO
+Se me ha explicado que es conveniente proceder, en mi situación, a recibir tratamiento de Peptonas. El objeto de la técnica es ayudar a dar firmeza y aumentar glúteos.
+
+El tratamiento consiste en inyectar peptonas del Laboratorio NATURAL SPAIN reafirmantes como colágeno, elastina, piel embrionaria, etc.
+
+Se me ha entregado en el momento de la información verbal, información escrita de cada tratamiento donde se especifica laboratorios, principios activos y proceder del tratamiento. He sido correctamente informado/a de las características de este tratamiento, de la forma y pormenores de su realización, de su mecanismo de acción, de sus efectos inmediatos, de la evolución y precauciones que deberé adoptar y de la variabilidad en el tiempo necesario para dar por finalizado el tratamiento.
+
+Entiendo que, aunque el tratamiento seleccionado sea el más adecuado para mí y a pesar de su correcta realización, a veces pueden darse efectos no deseados, como hinchazón, enrojecimiento, escozor, algún hematoma que desaparecerán espontáneamente en varios días.
+
+Sé y acepto que circunstancias personales (enfermedades, hábitos y tratamientos que no he ocultado y que consta en mi historial clínico) pueden incrementar la incidencia de las complicaciones indicadas e incluso otras.
+
+Me comprometo a seguir fielmente las indicaciones, para que el tratamiento tenga los mejores resultados.
+
+Asumo el riesgo de que, como consecuencia de un tratamiento correctamente realizado, puedo no sentirme satisfecho/a con la apreciación personal y subjetiva del resultado estético obtenido.
+
+He entendido claramente toda la información concerniente al tratamiento que se me ha facilitado. El personal que me ha atendido me ha permitido realizar todas las observaciones y me ha aclarado todas las dudas que he planteado.
+
+Reconozco y acepto que el tratamiento propuesto no agota los recursos y podía ser que requiriese una actuación terapéutica posterior.
+
+Sé que en cualquier momento previo al tratamiento puedo considerar mi consentimiento y anular este documento.
+
+Accedo y autorizo a seguir un control fotográfico pre y post tratamientos u otros materiales audiovisuales y gráficos y con la sola finalidad del control evolutivo de mi tratamiento y valoración científica.
+
+Considerando que he sido suficientemente informado/a y aclaradas mis posibles dudas sobre el procedimiento y posibles resultados.
+
+ES IMPORTANTE QUE LEA CUIDADOSAMENTE LA INFORMACIÓN Y HAYAN SIDO RESPONDIDAS TODAS SUS PREGUNTAS ANTES DE QUE FIRME EL CONSENTIMIENTO.
+
+Nombre y Firma de la paciente y fecha
+Nombre y firma de responsable
+
+QC. Claudia Yadira López Ortíz`
+};
+      consentimiento.value = textos[servicio] || '';
+    }
+
+    function verHistorial() {
+      const nombre = document.querySelector('[name="nombres"]').value.trim();
+      const apellidos = document.querySelector('[name="apellidos"]').value.trim();
+      if (!nombre || !apellidos) {
+        Toastify({
+          text: "Por favor completa el nombre y apellidos para buscar el historial.",
+          duration: 3000,
+          gravity: "top",
+          position: "right",
+          backgroundColor: "#f44336"
+        }).showToast();
+        return;
+      }
+      const query = encodeURIComponent(`${nombre} ${apellidos}`);
+      const iframe = document.getElementById('iframeHistorial');
+      const panel = document.getElementById('panelHistorial');
+      iframe.src = `https://docs.google.com/spreadsheets/d/1g_Un1xjOOLp0Km7OImiiyWAorqp-w66l/edit#gid=0&range=A1&search=${query}`;
+      panel.style.display = 'block';
+    }
+
+    function cerrarHistorial() {
+      document.getElementById('iframeHistorial').src = '';
+      document.getElementById('panelHistorial').style.display = 'none';
+    }
+
+    function imprimirHistorial() {
+      const iframe = document.getElementById('iframeHistorial');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.print();
+      } else {
+        Toastify({
+          text: "No se pudo acceder al historial para imprimir",
+          duration: 3000,
+          gravity: "top",
+          position: "right",
+          backgroundColor: "#f44336"
+        }).showToast();
+      }
+    }
+  </script>
+</body>
+</html>
